@@ -1,58 +1,286 @@
+# 📦 Projeto: Infraestrutura AWS com CDK, ECS, RDS, Puppet e FastAPI
 
-# Welcome to your CDK Python project!
+Este projeto provisiona uma infraestrutura completa na AWS utilizando AWS CDK (Python), integrando:
 
-This is a blank project for CDK development with Python.
+- VPC com subnets públicas e privadas
+- EC2 Bastion Host com Puppet
+- RDS Aurora PostgreSQL Serverless v2
+- ECS Fargate
+- ECR
+- Application Load Balancer
+- Aplicação FastAPI
+- Pipeline CI/CD com GitHub Actions
 
-The `cdk.json` file tells the CDK Toolkit how to execute your app.
+## 🗺️ Arquitetura
 
-This project is set up like a standard Python project.  The initialization
-process also creates a virtualenv within this project, stored under the `.venv`
-directory.  To create the virtualenv it assumes that there is a `python3`
-(or `python` for Windows) executable in your path with access to the `venv`
-package. If for any reason the automatic creation of the virtualenv fails,
-you can create the virtualenv manually.
+```mermaid
+flowchart TB
+    User[Usuário / Internet] --> ALB[Application Load Balancer :80]
 
-To manually create a virtualenv on MacOS and Linux:
+    subgraph AWS
+        subgraph VPC
+            subgraph PublicSubnet
+                ALB
+            end
+
+            subgraph PrivateSubnet
+                ECS[ECS Fargate Service]
+                Bastion[Bastion Host EC2]
+                RDS[(Aurora PostgreSQL)]
+            end
+        end
+
+        S3[S3 Puppet Bucket]
+        ECR[ECR Repository]
+        Secrets[Secrets Manager]
+    end
+
+    ALB --> ECS
+    ECS --> RDS
+
+    ECS --> Secrets
+    Bastion --> RDS
+    Bastion --> S3
+
+    ECS --> ECR
+```
+
+## 🧱 Componentes da Infraestrutura
+
+### 🪣 S3 (Puppet Bucket)
+
+Bucket responsável por armazenar os manifests e módulos Puppet.
+
+**Função:**
+
+- Centralizar os arquivos de configuração
+- Permitir que o Bastion Host sincronize os manifests automaticamente
+
+### 🌐 VPC
+
+- 2 AZs
+- Subnets:
+  - Públicas (ALB)
+  - Privadas com NAT (ECS, RDS, Bastion)
+
+### 🖥️ Bastion Host (EC2)
+
+Instância EC2 privada usada para:
+
+- Acesso administrativo via AWS SSM
+- Execução do Puppet
+
+**Funções:**
+
+- Instala o Puppet
+- Sincroniza arquivos do S3
+- Aplica os manifests automaticamente no boot
+
+**Trecho executado:**
 
 ```
-$ python3 -m venv .venv
+aws s3 sync s3://<bucket>/puppet /opt/puppet
+puppet apply puppet/manifests/site.pp
 ```
 
-After the init process completes and the virtualenv is created, you can use the following
-step to activate your virtualenv.
+### 🗄️ RDS Aurora PostgreSQL Serverless v2
+
+Banco de dados relacional:
+
+- Engine: Aurora PostgreSQL 14
+- Serverless (auto scaling)
+- Acesso permitido apenas:
+  - Bastion Host
+  - ECS
+- Credenciais:
+  - Geradas automaticamente pelo Secrets Manager
+
+### 🐳 ECR (Elastic Container Registry)
+
+Repositório para armazenar a imagem Docker da aplicação FastAPI.
+
+### 🚀 ECS Fargate
+
+Executa a aplicação FastAPI como container.
+
+**Configuração:**
+
+- Task Definition
+- Variáveis de ambiente:
+  - DB_NAME
+  - DB_HOST
+- Secrets:
+  - DB_USER
+  - DB_PASSWORD
+
+### ⚖️ Application Load Balancer (ALB)
+
+- Porta: 80
+- Roteia requisições para ECS
+- Health check: `/health`
+
+## 🧩 Aplicação FastAPI
+
+**Local:** `app_fastapi/`
+
+**Função:**
+
+- API REST
+- Conectada ao banco PostgreSQL
+- Exposta via ALB
+
+**Exemplo de endpoint:**
+
+- GET `/health`
+
+## 🧙 Puppet
+
+**Estrutura:**
 
 ```
-$ source .venv/bin/activate
+puppet/
+├── manifests
+│   └── site.pp
+└── modules
+    ├── users
+    └── phpmyadmin
 ```
 
-If you are a Windows platform, you would activate the virtualenv like this:
+**Funções:**
 
+- Criação de usuários
+- Instalação de pacotes
+- Configuração automática da instância
+- Aplicado automaticamente no Bastion Host.
+
+## ⚙️ GitHub Actions (Workflow)
+
+Pipeline responsável por:
+
+- Autenticar na AWS via OIDC
+- Instalar dependências
+- Executar: `cdk deploy --require-approval never`
+
+**Disparos:**
+
+- Push na branch main
+- Manual (workflow_dispatch)
+
+## ▶️ Como executar
+
+1. **Instalar dependências**
+
+   ```
+   pip install -r requirements.txt
+   npm install -g aws-cdk
+   ```
+
+2. **Bootstrap do CDK**
+
+   ```
+   cdk bootstrap
+   ```
+
+3. **Deploy da infra**
+   ```
+   cdk deploy
+   ```
+
+## 📤 Outputs
+
+Ao final do deploy:
+
+- URL pública da aplicação
+- ID da instância Bastion
+- Endpoint do banco
+- ARN do Secret
+- Nome do bucket Puppet
+
+## 🔐 Boas práticas implementadas
+
+- ✔️ Subnets privadas
+- ✔️ Sem IP público no ECS
+- ✔️ Credenciais no Secrets Manager
+- ✔️ Infra como código (CDK)
+- ✔️ Automatização com Puppet
+- ✔️ CI/CD com GitHub Actions
+
+## 🧠 Tecnologias
+
+- AWS CDK (Python)
+- FastAPI
+- ECS Fargate
+- Aurora PostgreSQL
+- Puppet
+- Docker
+- GitHub Actions
+
+## 📌 Observações
+
+Este projeto é didático e demonstra:
+
+- Integração de Infra + App
+- Infra automatizada
+- Configuração automática via Puppet
+- Deploy contínuo com pipeline
+
+## 🔁 Fluxo de Inicialização (Boot)
+
+```mermaid
+sequenceDiagram
+    participant EC2 as Bastion Host
+    participant S3 as S3 Puppet Bucket
+    participant Puppet as Puppet
+    participant RDS as Aurora DB
+
+    EC2->>S3: aws s3 sync /puppet
+    EC2->>Puppet: puppet apply site.pp
+    Puppet->>EC2: Configura sistema
+    EC2->>RDS: Testa conectividade
 ```
-% .venv\Scripts\activate.bat
+
+## 🚀 Fluxo da Aplicação (Request)
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant ALB
+    participant ECS
+    participant RDS
+
+    User->>ALB: HTTP Request
+    ALB->>ECS: Forward
+    ECS->>RDS: Query
+    RDS->>ECS: Response
+    ECS->>ALB: HTTP 200
+    ALB->>User: JSON Response
 ```
 
-Once the virtualenv is activated, you can install the required dependencies.
+## ⚙️ Fluxo do Pipeline (GitHub Actions)
 
+```mermaid
+flowchart LR
+    Dev[Dev faz push na main] --> GitHub[GitHub Repo]
+
+    GitHub --> Actions[GitHub Actions Workflow]
+
+    Actions --> Checkout[Checkout do código]
+    Checkout --> Auth[AWS Auth (OIDC)]
+    Auth --> Deps[Instala dependências]
+    Deps --> CDK[cdk deploy]
+
+    CDK --> CloudFormation[CloudFormation Stack]
+    CloudFormation --> Infra[Infra provisionada/atualizada]
 ```
-$ pip install -r requirements.txt
+
+## 🧩 Fluxo do Deploy da Aplicação
+
+```mermaid
+flowchart LR
+    Dev --> Build[Build da imagem Docker]
+    Build --> Push[ECR]
+    Push --> ECS[ECS Fargate]
+
+    ECS -->|Nova task| ALB
+    ALB --> User
 ```
-
-At this point you can now synthesize the CloudFormation template for this code.
-
-```
-$ cdk synth
-```
-
-To add additional dependencies, for example other CDK libraries, just add
-them to your `requirements.txt` file and rerun the `python -m pip install -r requirements.txt`
-command.
-
-## Useful commands
-
- * `cdk ls`          list all stacks in the app
- * `cdk synth`       emits the synthesized CloudFormation template
- * `cdk deploy`      deploy this stack to your default AWS account/region
- * `cdk diff`        compare deployed stack with current state
- * `cdk docs`        open CDK documentation
-
-Enjoy!

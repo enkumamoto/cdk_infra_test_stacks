@@ -26,7 +26,7 @@ jobs:
 
       - name: Get Puppet Bucket Name (CDK Output)
         run: |
-          BUCKET=$(aws cloudformation describe-stacks \
+          PUPPET_BUCKET=$(aws cloudformation describe-stacks \
             --stack-name CdkInfraTestStack \
             --query "Stacks[0].Outputs[?OutputKey=='PuppetBucketName'].OutputValue" \
             --output text)
