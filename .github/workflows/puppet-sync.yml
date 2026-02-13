@@ -1,0 +1,46 @@
+name: Sync Puppet to S3
+
+on:
+  push:
+    branches: ["main"]
+    paths:
+      - "puppet/**"
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE }}
+          aws-region: us-east-1
+
+      - name: Get Puppet Bucket Name (CDK Output)
+        run: |
+          BUCKET=$(aws cloudformation describe-stacks \
+            --stack-name CdkInfraTestStack \
+            --query "Stacks[0].Outputs[?OutputKey=='PuppetBucketName'].OutputValue" \
+            --output text)
+
+          echo "PUPPET_BUCKET=$BUCKET" >> $GITHUB_ENV
+
+      - name: Sync Puppet files to S3
+        run: |
+          aws s3 sync puppet/ s3://$PUPPET_BUCKET --delete
+
+      - name: Reboot Bastion Host
+        run: |
+          INSTANCE_ID=$(aws ec2 describe-instances \
+            --filters "Name=tag:Name,Values=devops-test-bastion" \
+            --query "Reservations[0].Instances[0].InstanceId" \
+            --output text)
+
+          aws ec2 reboot-instances --instance-ids $INSTANCE_ID

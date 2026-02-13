@@ -1,0 +1,40 @@
+name: Deploy Infra (CDK)
+
+on:
+  push:
+    branches: ["main"]
+    paths:
+      - "cdk_infra_test/**"
+      - "app.py"
+      - "requirements.txt"
+      - "cdk.json"
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE }}
+          aws-region: us-east-1
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          npm install -g aws-cdk
+
+      - name: Deploy CDK
+        run: cdk deploy --require-approval never

@@ -1,0 +1,61 @@
+# =========================
+# Python
+# =========================
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.venv/
+.env
+
+# =========================
+# CDK
+# =========================
+cdk.out/
+.cdk.staging/
+cdk.context.json
+
+# =========================
+# Node / Frontend (se usar depois)
+# =========================
+node_modules/
+package-lock.json
+npm-debug.log*
+
+# =========================
+# Docker
+# =========================
+*.log
+*.pid
+
+# =========================
+# Editor / SO
+# =========================
+*.swp
+*.swo
+*.tmp
+*.bak
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# =========================
+# Testes / Coverage
+# =========================
+.coverage
+htmlcov/
+
+# =========================
+# Terraform (se um dia misturar)
+# =========================
+.terraform/
+*.tfstate
+*.tfstate.*
+.crash.log
+
+# =========================
+# Outros
+# =========================
+dist/
+build/
