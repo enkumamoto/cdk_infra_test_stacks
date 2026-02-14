@@ -1,4 +1,3 @@
-````md
 # 📦 Projeto: Infraestrutura AWS com CDK, ECS, RDS, Puppet e FastAPI
 
 Este projeto provisiona uma infraestrutura completa na AWS utilizando AWS CDK (Python), integrando:
@@ -50,7 +49,6 @@ flowchart TB
 
     ECS --> ECR
 ```
-````
 
 ## 🧱 Componentes da Infraestrutura
 
@@ -180,7 +178,7 @@ Executa a aplicação FastAPI como container.
 
 **Estrutura:**
 
-```
+```bash
 puppet/
 ├── manifests
 │   └── site.pp
@@ -213,20 +211,20 @@ Pipeline responsável por:
 
 1. **Instalar dependências**
 
-   ```
+   ```bash
    pip install -r requirements.txt
    npm install -g aws-cdk
    ```
 
 2. **Bootstrap do CDK**
 
-   ```
+   ```bash
    cdk bootstrap
    ```
 
 3. **Deploy da infra**
 
-   ```
+   ```bash
    cdk deploy
    ```
 
