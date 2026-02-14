@@ -38,7 +38,6 @@ flowchart TB
     end
 
     VPN --> Bastion
-    VPN --> RDS
 
     ALB --> ECS
     ECS --> RDS

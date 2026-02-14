@@ -10,6 +10,8 @@ from aws_cdk import (
     aws_s3 as s3,
     aws_iam as iam,
     aws_elasticloadbalancingv2 as elbv2,
+    aws_acmpca as acmpca,
+    aws_certificatemanager as acm,
     CfnOutput,
 )
 from constructs import Construct
@@ -20,12 +22,57 @@ class CdkInfraTestStack(Stack):
     def __init__(self, scope: Construct, construct_id: str, **kwargs):
         super().__init__(scope, construct_id, **kwargs)
         
-        # Certificate
-        server_certificate_arn = self.node.try_get_context("server_certificate_arn")
-        client_certificate_arn = self.node.try_get_context("client_certificate_arn")
+        # CA
+        vpn_ca = acmpca.CfnCertificateAuthority(
+            self,
+            "VpnPrivateCA",
+            type="ROOT",
+            key_algorithm="RSA_2048",
+            signing_algorithm="SHA384withRSA",
+            subject=acmpca.CfnCertificateAuthority.SubjectProperty(
+                country="BR",
+                organization="DevOpsTest",
+                organizational_unit="IT",
+                common_name="vpn.devops.local",
+            ),
+        )
+
+        # Certificado da própria CA (self-signed)
+        ca_certificate = acmpca.CfnCertificate(
+            self,
+            "VpnPrivateCACertificate",
+            certificate_authority_arn=vpn_ca.attr_arn,
+            certificate_signing_request=vpn_ca.attr_certificate_signing_request,
+            signing_algorithm="SHA384withRSA",
+            template_arn="arn:aws:acm-pca:::template/RootCACertificate/V1",
+            validity=acmpca.CfnCertificate.ValidityProperty(
+                type="YEARS",
+                value=10,
+            ),
+        )
+
+        # Ativação da CA
+        acmpca.CfnCertificateAuthorityActivation(
+            self,
+            "VpnPrivateCAActivation",
+            certificate_authority_arn=vpn_ca.attr_arn,
+            certificate=ca_certificate.attr_certificate,
+            status="ACTIVE",
+        )
+
         
-        if not server_certificate_arn or not client_certificate_arn:
-            raise ValueError("Inform certificates (Server and Client)")
+        # Certificates
+        server_cert = acm.Certificate(
+            self,
+            "VpnServerCert",
+            domain_name="vpn-server.devopstest.local",
+        )
+        
+        client_cert = acm.Certificate(
+            self,
+            "VpnClientCert",
+            domain_name="vpn-client.devopstest.local",
+        )
         
         # S3 Bucket
         self.puppet_bucket = s3.Bucket(
@@ -76,15 +123,15 @@ class CdkInfraTestStack(Stack):
                 ec2.CfnClientVpnEndpoint.ClientAuthenticationRequestProperty(
                     type="certificate-authentication",
                     mutual_authentication=ec2.CfnClientVpnEndpoint.CertificateAuthenticationRequestProperty(
-                        client_root_certificate_chain_arn=client_certificate_arn
-                        ),
-                    )
-                ],
+                        client_root_certificate_chain_arn=client_cert.certificate_arn,
+                    ),
+                ),
+            ],
             client_cidr_block="10.100.0.0/22",
             connection_log_options=ec2.CfnClientVpnEndpoint.ConnectionLogOptionsProperty(
                 enabled=False,
-                ),
-            server_certificate_arn=server_certificate_arn,
+            ),
+            server_certificate_arn=server_cert.certificate_arn,
             vpc_id=self.vpc.vpc_id,
             security_group_ids=[vpn_sg.security_group_id],
             split_tunnel=True,
@@ -104,10 +151,9 @@ class CdkInfraTestStack(Stack):
             self,
             "VpnAuthRule",
             client_vpn_endpoint_id=client_vpn.ref,
-            target_network_cidr_block=self.vpc.vpc_cidr_block,
+            target_network_cidr=self.vpc.vpc_cidr_block,
             authorize_all_groups=True,
-        )
-            
+        )            
         
         # Bastion SG
         bastion_sg = ec2.SecurityGroup(
